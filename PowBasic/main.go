@@ -5,6 +5,7 @@ import (
 	"strconv"
 )
 
+// Hope have a happy mining---------------------------
 func main() {
 	bc := NewBlockchain()
 
