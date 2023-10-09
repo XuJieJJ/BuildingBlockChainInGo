@@ -59,16 +59,52 @@ func (cli *CLI) printChain() {
 	}
 }
 
+func (cli *CLI) getBalance(address string) {
+	bc := NewBlockchain(address)
+	defer bc.db.Close()
+
+	balance := 0
+	UTXOs := bc.FindUTXO(address)
+
+	for _, out := range UTXOs {
+		balance += out.Value
+	}
+	//账户余额就是所有的由账户地址锁定的未花费交易出账的值的总和
+	fmt.Printf("Balance of '%s': %d\n", address, balance)
+}
+
+func (cli *CLI) send(from, to string, amount int) {
+	bc := NewBlockchain(from)
+	defer bc.db.Close()
+
+	tx := NewUTXOTransaction(from, to, amount, bc)
+
+	bc.MineBlock([]*Transaction{tx})
+	fmt.Println("Success!")
+}
+
 // 所有与命令行相关的操作都将由 CLI 结构处理：
 func (cli *CLI) Run() {
 	cli.validateArgs()
 
+	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
+	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printChain", flag.ExitOnError)
 
+	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for ")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send block reward to")
+	sendFrom := sendCmd.String("from", "", "Source wallet address")
+	sendTo := sendCmd.String("to", "", "Destination waller address")
+	sendAmount := sendCmd.Int("amount", 0, "Amount to send")
 
 	switch os.Args[1] {
+	case "getbalance":
+		err := getBalanceCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+
 	case "createblockchain":
 		err := createBlockchainCmd.Parse(os.Args[2:])
 		if err != nil {
@@ -79,10 +115,23 @@ func (cli *CLI) Run() {
 		if err != nil {
 			log.Panic(err)
 		}
+	case "send":
+		err := sendCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
 
 	default:
 		cli.printUsage()
 		os.Exit(1)
+	}
+
+	if getBalanceCmd.Parsed() {
+		if *getBalanceAddress == "" {
+			getBalanceCmd.Usage()
+			os.Exit(1)
+		}
+		cli.getBalance(*getBalanceAddress)
 	}
 
 	if createBlockchainCmd.Parsed() {
@@ -95,4 +144,12 @@ func (cli *CLI) Run() {
 	if printChainCmd.Parsed() {
 		cli.printChain()
 	}
+	if sendCmd.Parsed() {
+		if *sendFrom == "" || *sendTo == "" || *sendAmount <= 0 {
+			sendCmd.Usage()
+			os.Exit(1)
+		}
+		cli.send(*sendFrom, *sendTo, *sendAmount)
+	}
+
 }

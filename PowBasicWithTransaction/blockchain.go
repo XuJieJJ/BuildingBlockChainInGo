@@ -223,4 +223,28 @@ func (bc *BlockChain) FindUTXO(address string) []TXOutput {
 	return UTXOs
 }
 
+// 在创建新的输出之前，先找到所有的未花费出账并确认它们存了足够的币
+func (bc *BlockChain) FindSpendableOutputs(address string, amount int) (int, map[string][]int) {
+	unspentOutputs := make(map[string][]int)
+	unspentTXs := bc.FindUnspentTransactions(address) //返回与指定地址相关的未花费交易列表
+	accumulated := 0                                  //跟踪累计的金额
+
+Work:
+	for _, tx := range unspentTXs {
+		txID := hex.EncodeToString(tx.ID)
+
+		for outIdx, out := range tx.Vout {
+			if out.CanBeUnlockedWith(address) && accumulated < amount { //检查输出是否可以由给定的地址解锁，并且累积的金额小于需要的金额
+				accumulated += out.Value
+				unspentOutputs[txID] = append(unspentOutputs[txID], outIdx)
+
+				if accumulated >= amount {
+					break Work
+				}
+			}
+		}
+	}
+	return accumulated, unspentOutputs
+}
+
 //
